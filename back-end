@@ -1,0 +1,100 @@
+// Import required packages
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const bodyParser = require('body-parser');
+
+// Initialize app
+const app = express();
+app.use(bodyParser.json());
+
+// Mock database
+let todos = [];
+let currentId = 1;
+const users = [{ username: 'user', password: 'password' }];
+const secretKey = 'your_secret_key';
+
+// Middleware for authentication
+const authenticateToken = (req, res, next) => {
+  const token = req.headers['authorization'];
+  if (!token) return res.sendStatus(401);
+
+  jwt.verify(token, secretKey, (err, user) => {
+    if (err) return res.sendStatus(403);
+    req.user = user;
+    next();
+  });
+};
+
+// User login
+app.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = users.find((u) => u.username === username && u.password === password);
+
+  if (!user) {
+    return res.status(401).json({ message: 'Invalid credentials' });
+  }
+
+  const token = jwt.sign({ username: user.username }, secretKey, { expiresIn: '1h' });
+  res.json({ token });
+});
+
+// Create a new todo
+app.post('/todos', authenticateToken, (req, res) => {
+  const { title, description } = req.body;
+  if (!title) {
+    return res.status(400).json({ message: 'Title is required' });
+  }
+
+  const todo = { id: currentId++, title, description, completed: false };
+  todos.push(todo);
+  res.status(201).json(todo);
+});
+
+// Update a todo
+app.put('/todos/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const { title, description, completed } = req.body;
+  const todo = todos.find((t) => t.id === parseInt(id));
+
+  if (!todo) {
+    return res.status(404).json({ message: 'Todo not found' });
+  }
+
+  if (title !== undefined) todo.title = title;
+  if (description !== undefined) todo.description = description;
+  if (completed !== undefined) todo.completed = completed;
+
+  res.json(todo);
+});
+
+// Delete a todo
+app.delete('/todos/:id', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const todoIndex = todos.findIndex((t) => t.id === parseInt(id));
+
+  if (todoIndex === -1) {
+    return res.status(404).json({ message: 'Todo not found' });
+  }
+
+  todos.splice(todoIndex, 1);
+  res.status(204).send();
+});
+
+// Mark a todo as completed
+app.patch('/todos/:id/mark-read', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  const todo = todos.find((t) => t.id === parseInt(id));
+
+  if (!todo) {
+    return res.status(404).json({ message: 'Todo not found' });
+  }
+
+  todo.completed = true;
+  res.json(todo);
+});
+
+// Start the server
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+});
